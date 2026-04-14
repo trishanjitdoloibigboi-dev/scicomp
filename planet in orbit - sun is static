@@ -1,0 +1,99 @@
+import numpy as np
+import matplotlib
+matplotlib.use('TkAgg') 
+import matplotlib.pyplot as plt
+from scipy.integrate import odeint  
+import sympy as sm
+import matplotlib.animation as funcAnimation
+
+
+#defining symbols
+t = sm.symbols('t')
+G = sm.symbols('G', positive=True)
+m, M, g = sm.symbols(r'm M g', positive=True) # these are always positive M is fixed at (0,0)
+r = sm.symbols(r'r', cls=sm.Function, positive=True)  # ← cls=sm.Function
+r_d  = sm.diff(r(t), t)
+r_dd = sm.diff(r_d, t)
+the = sm.symbols(r'\theta', cls=sm.Function)
+the_d = sm.diff(the(t), t)
+the_dd = sm.diff(the_d, t)
+
+#defining lagrangian
+
+T = 0.5 * m * (r_d**2 + (r(t) * the_d)**2)
+V = -G * M * m / r(t)
+L = T - V
+
+#solving lagrangian equation
+
+eq1 = sm.diff(sm.diff(L, the_d), t) - sm.diff(L, the(t))
+eq2 = sm.diff(sm.diff(L, r_d), t) - sm.diff(L, r(t))   # ← r(t)
+
+sol = sm.solve([eq1, eq2], (the_dd, r_dd))
+le1 = sm.lambdify((the(t), r(t), the_d, r_d, m, M, G), sol[the_dd])
+le2 = sm.lambdify((the(t), r(t), the_d, r_d, m, M, G), sol[r_dd])
+
+#ploting the trajectory of the planet
+
+t = np.linspace(0, 20, 2001)
+
+def traj(y, t, m, M, G):
+    the , r, the_d, r_d = y
+    return [the_d, r_d, le1(the, r, the_d, r_d, m, M, G), le2(the, r, the_d, r_d, m, M, G)] 
+y0 = [0, 1.5, 2, 0] # theta, r, theta', r'
+G = 10
+sol = odeint(traj, y0, t, args=(1, 1, G))
+r = sol[:,1]
+the = sol[:,0]
+x = sol[:, 1] * np.cos(sol[:, 0])
+y = sol[:, 1] * np.sin(sol[:, 0])
+plt.plot(x, y,'b-' ,label='Planet trajectory')
+ # starting point
+plt.plot(0, 0, 'y*', markersize=15, label='Central body')        # central mass
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Trajectory of the planet under gravitational force')
+plt.legend()
+plt.axis('equal')
+plt.grid()
+
+
+#curve fitting
+from scipy.optimize import curve_fit as cf
+
+def conic(theta, a, e):          # ← theta first
+    return a / (1 - e * np.cos(theta))
+
+theta_unwrapped = np.unwrap(the)  # ← handles phase jumps
+popt, pcov = cf(conic, theta_unwrapped, r, p0=[np.mean(r), 0.3])
+a_opt, e_opt = popt
+#print(f"a = {a_opt:.4f}, e = {e_opt:.4f}")
+
+theta_fit = np.linspace(theta_unwrapped[0], theta_unwrapped[-1], 1000)
+r_fit = conic(theta_fit, a_opt, e_opt)
+x_fit = r_fit * np.cos(theta_fit)
+y_fit = r_fit * np.sin(theta_fit)
+
+plt.plot(x_fit, y_fit, 'r--', label=f'Fit: a={a_opt:.3f}, e={e_opt:.3f}')
+plt.show()
+#tbd
+
+#animation
+fig, ax = plt.subplots()
+ax.set_aspect('equal')
+ax.set_xlim((min(x)-abs(min(x))*.5), max(x)+0.5*abs(max(x)))
+ax.set_ylim(min(y)-0.5*abs(min(y)), max(y)+0.5*abs(max(y)))
+ax.plot(x, y, 'b-', alpha=0.3, label='trajectory')   # ← full trail always visible
+ax.plot(x_fit, y_fit, 'r--', label=f'Fit: a={a_opt:.3f}, e={e_opt:.3f}')  # ← fit too
+ax.plot(0, 0, 'y*', markersize=15, label='Central body')
+ax.grid()
+ax.legend()
+
+planet, = ax.plot([], [], 'bo', markersize=10, label='Planet')
+
+def update(frame):
+    planet.set_data([x[frame]], [y[frame]])
+    return planet,
+
+ani = funcAnimation.FuncAnimation(fig, update, frames=len(t), interval=1,  blit=True)
+plt.show()
