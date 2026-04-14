@@ -1,0 +1,91 @@
+import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+from scipy.integrate import odeint
+import sympy as sm
+import matplotlib.animation as funcAnimation
+#we assume com to be static at the origin and the two bodies are of different masses m1 and m2. 
+# we also assume that the two bodies are only under the influence of their mutual gravitational force 
+# and no other forces are acting on them. 
+# we also assume that the motion of the two bodies is confined to a plane.
+#defining symbols
+p = 1
+t = sm.symbols('t')
+G = sm.symbols('G', positive=True)
+m1, m2 = sm.symbols(r'm_1 m_2', positive=True)
+theta = sm.symbols(r'\theta', cls=sm.Function)
+r1 = sm.symbols(r'r_1', cls=sm.Function, positive=True)  # ← r1 is a function of time
+r2 = -r1(t) * m1 / m2                    # ← just an expression
+r2_d    = sm.diff(r2, t)
+r2_dd   = sm.diff(r2_d, t)
+r1_d = sm.diff(r1(t), t)
+r1_dd = sm.diff(r1_d, t)
+r2_d = sm.diff(r2, t)
+r2_dd = sm.diff(r2_d, t)
+theta_d = sm.diff(theta(t), t)
+theta_dd = sm.diff(theta_d, t)  
+#defining lagrangian
+
+T = 0.5 * m1 * (r1_d**2 + (r1(t) * theta_d)**2) + 0.5 * m2 * (r2_d**2 + (r2 * theta_d)**2)
+V = -G * m1 * m2 / (r1(t) - r2)**p  # ← r1(t) - r2 is just an expression
+L = T - V
+
+#solving lagrangian equation
+
+eq1 = sm.diff(sm.diff(L, theta_d), t) - sm.diff(L, theta(t))
+eq2 = sm.diff(sm.diff(L, r1_d), t) - sm.diff(L, r1(t))
+sol = sm.solve([eq1, eq2], (theta_dd, r1_dd))
+le1 = sm.lambdify((theta(t), r1(t), theta_d, r1_d, m1, m2, G), sol[theta_dd])
+le2 = sm.lambdify((theta(t), r1(t), theta_d, r1_d, m1, m2, G), sol[r1_dd])
+
+#ploting the trajectory of the two bodies
+t = np.linspace(0, 20, 1001)
+def traj(y, t, m1, m2, G):
+    theta , r1, theta_d, r1_d = y
+    return [theta_d, r1_d, le1(theta, r1, theta_d, r1_d, m1, m2, G), le2(theta, r1, theta_d, r1_d, m1, m2, G)]
+y0 = [0, 1, 2, 0] # theta, r1, theta', r1'
+G = 10
+m1 = 1
+m2 = 2
+sol = odeint(traj, y0, t, args=(m1, m2, G))
+r1 = sol[:,1]
+r2 = -r1 * m1 / m2
+theta = sol[:,0]
+x1 = r1 * np.cos(theta)
+y1 = r1 * np.sin(theta)
+x2 = r2 * np.cos(theta)
+y2 = r2 * np.sin(theta)
+plt.plot(x1, y1, 'b-', label='Body 1 trajectory')
+plt.plot(x2, y2, 'r-', label='Body 2 trajectory')
+plt.plot(0, 0, 'y*', markersize=15, label='Center of Mass')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Trajectory of two bodies under mutual gravitational force')
+plt.legend()
+plt.axis('equal')   
+plt.grid()
+plt.show()
+
+#animating
+
+fig, ax = plt.subplots()
+ax.set_aspect('equal')
+all_x = np.concatenate([x1, x2])
+all_y = np.concatenate([y1, y2])
+
+ax.set_xlim(min(all_x) - 0.5, max(all_x) + 0.5)
+ax.set_ylim(min(all_y) - 0.5, max(all_y) + 0.5)
+ax.plot(0, 0, 'y*', markersize=15, label='Central body')
+ax.plot(x1, y1, 'r-')
+ax.plot(x2, y2, 'b-')
+p1, = ax.plot([], [], 'bo-', lw=2, label='Body 1')
+p2, = ax.plot([], [], 'ro-', lw=2, label='Body 2')
+ax.legend()
+
+def update(frame):
+    p1.set_data([x1[frame]], [y1[frame]])
+    p2.set_data([x2[frame]], [y2[frame]])
+    return p1, p2
+ani = funcAnimation.FuncAnimation(fig, update, frames=len(t), interval=10, blit=True)
+plt.show()
