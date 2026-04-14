@@ -1,0 +1,63 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import sympy as sm
+from scipy.integrate import odeint
+import matplotlib.animation as funcAnimation
+
+#defining symbols
+
+t = sm.symbols('t')
+m_1, l, g = sm.symbols(r'm_1 l g', positive=True)
+the1 = sm.symbols(r'\theta_1', cls=sm.Function)
+x_1 = l*sm.sin(the1(t))
+y_1 = -l*sm.cos(the1(t))
+
+the1_d = sm.diff(the1(t), t)
+the1_dd = sm.diff(the1_d, t)
+x_1_d = sm.diff(x_1, t)
+y_1_d = sm.diff(y_1, t)
+
+#defining equations
+
+E =the1_dd + (g/l)*sm.sin(the1(t))
+
+E = sm.simplify(E)
+
+#finding solutions
+
+sol = sm.solve(E, the1_dd)
+LE = sm.lambdify((the1(t), the1_d, m_1, l, g), sol[0])
+
+#odeint
+
+intial_condition = [1, 0] # theta1, thata1'
+m1 = 1
+l = 1
+g = 9.8
+
+def L(y, t, m_1, l, g_val):
+    the1 , the1d = y
+    return [the1d, LE(the1, the1d, m_1, l, g_val)]
+
+t = np.linspace(0, 40, 1001)
+sol = odeint(L, intial_condition, t, args =(m1, l , g))
+
+x1 = np.sin(sol[:, 0]) * l
+y1 = -np.cos(sol[:, 0]) * l
+
+
+#animation
+
+def update(frame):
+    print(f"\rFrame {frame:4d} | θ₁ = {np.degrees(sol[frame, 0]):8.3f}°", end='', flush=True)
+    pendulum1.set_data([0, x1[frame]], [0, y1[frame]])
+    bob.set_data([x1[frame]], [y1[frame]])
+    return pendulum1, bob
+fig, ax = plt.subplots()
+ax.set_aspect('equal')
+ax.set_xlim(-3, 3)
+ax.set_ylim(-3, 3)
+pendulum1, = ax.plot([], [], 'o-', lw=2)
+bob, = ax.plot([], [], 'o', color='red')    
+ani = funcAnimation.FuncAnimation(fig, update, frames=len(t),interval=50, blit=True)
+plt.show()
