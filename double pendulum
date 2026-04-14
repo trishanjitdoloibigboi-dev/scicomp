@@ -1,0 +1,107 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import odeint
+import sympy as sm
+
+#defining symbols
+t = sm.symbols('t')
+m_1, m_2, g = sm.symbols(r'm_1 m_2 g', positive=True) # these are always positive
+the1, the2 = sm.symbols(r'\theta_1, \theta_2', cls=sm.Function)
+x1 = sm.sin(the1(t))
+y1 = -sm.cos(the1(t))
+x2 = x1 + sm.sin(the2(t))
+y2 = y1 - sm.cos(the2(t))
+
+#calculating derivative using sympy.diff
+#the upper ball
+the1_d = sm.diff(the1(t), t)
+the1_dd = sm.diff(the1_d, t)
+x1_d = sm.diff(x1, t)
+y1_d = sm.diff(y1, t)
+
+#lower ball
+
+the2_d = sm.diff(the2(t), t)
+the2_dd = sm.diff(the2_d, t)
+x2_d = sm.diff(x2, t)
+y2_d = sm.diff(y2, t)
+
+#calculating kinetic and potential energy and the Lagrangian
+T_1 = 0.5 * m_1 * (x1_d**2 + y1_d**2)
+T_2 = 0.5 * m_2 * (x2_d**2 + y2_d**2)
+V_1 = m_1 * g * y1
+V_2 = m_2 * g * y2
+L = T_1+T_2 - V_1 - V_2
+
+#calculating the equations of motion using the Euler-Lagrange equation  p = t, q = the1, the_2
+eq1 = sm.diff(sm.diff(L, the1_d), t) - sm.diff(L, the1(t))
+eq2 = sm.diff(sm.diff(L, the2_d), t) - sm.diff(L, the2(t))
+
+#optional step
+eq1 = sm.simplify(eq1)  
+eq2 = sm.simplify(eq2)
+#print(eq1)
+#print(eq2)
+
+#solving for the second derivative of the angles
+sol = sm.solve([eq1, eq2], (the1_dd, the2_dd))
+lef1 = sm.lambdify((the1(t), the2(t), the1_d, the2_d, m_1, m_2, g), sol[the1_dd]) #getting numrical function for the second derivative of the angles
+lef2 = sm.lambdify((the1(t), the2(t), the1_d, the2_d, m_1, m_2, g), sol[the2_dd])
+
+
+#final step using odeint
+
+intial_condition = [0, 0, 0, 10] # theta1, thata1', theta2, theta2'
+m1 = 1
+m2 = 1
+g = 9.8
+
+def L(y, t, m_1 , m_2 , g_val):
+    the1 , the1d, the2, the2d = y
+    the1dd = lef1(the1, the2, the1d, the2d, m_1, m_2, g_val)
+    the2dd = lef2(the1, the2, the1d, the2d, m_1, m_2, g_val)
+    
+    return [the1d, the1dd, the2d, the2dd]
+tp = np.linspace(0, 40, 1001)
+sol = odeint(L, intial_condition, tp, args=(m1, m2, g))
+the1_sol = sol[:, 0]
+the2_sol = sol[:, 2]
+the1_d_sol = sol[:, 1]
+the2_d_sol = sol[:, 3]
+x1_pendulum = np.sin(the1_sol)
+y1_pendulum = -np.cos(the1_sol)+2
+x2_pendulum = x1_pendulum + np.sin(the2_sol)
+y2_pendulum = y1_pendulum - np.cos(the2_sol)
+
+plt.plot(x1_pendulum, y1_pendulum, label='Mass 1')
+plt.plot(x2_pendulum, y2_pendulum, label='Mass 2')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Double Pendulum Trajectory')
+plt.legend()
+plt.axis('equal')
+plt.grid()
+plt.show()
+
+#animation of the double pendulum
+import matplotlib.animation as funcAnimation
+
+def update(frame):
+    pendumlum1.set_data([0, x1_pendulum[frame]], [2, y1_pendulum[frame]])
+    mass1.set_data([x1_pendulum[frame]], [y1_pendulum[frame]])
+
+    pendumlum2.set_data([x1_pendulum[frame], x2_pendulum[frame]], [y1_pendulum[frame], y2_pendulum[frame]])
+    mass2.set_data([x2_pendulum[frame]], [y2_pendulum[frame]])
+
+    print(f"\rFrame {frame:4d} | θ₁ = {np.degrees(the1_sol[frame])%360:8.3f}°  θ₂ = {np.degrees(the2_sol[frame])%360:8.3f}°", end='', flush=True)
+    
+    return pendumlum1, mass1, pendumlum2, mass2
+fig, ax = plt.subplots()
+ax.set_xlim(-3, 3)
+ax.set_ylim(-1, 3)
+pendumlum1, = ax.plot([], [], 'o-', lw=2, color='blue')
+mass1, = ax.plot([], [], 'o', color='blue', markersize=10)
+pendumlum2, = ax.plot([], [], 'o-', lw=2, color='red')
+mass2, = ax.plot([], [], 'o', color='red', markersize=10)
+ani = funcAnimation.FuncAnimation(fig, update, frames=len(tp),interval = 50 ,blit=True)
+plt.show()
